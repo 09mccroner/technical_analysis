@@ -1,6 +1,6 @@
-#[derive(Debug, serde::Deserialize, serde::Serialize, Clone)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, Clone, PartialEq)]
 pub struct ADX {
-    pub adx: f64,
-    pub di_plus: f64,
-    pub di_minus: f64,
+    pub adx_opt: Option<f64>,
+    pub di_plus_opt: Option<f64>,
+    pub di_minus_opt: Option<f64>,
 }

@@ -1,11 +1,11 @@
 use std::fmt;
 
 use ta::errors::{Result, TaError};
-use ta::indicators::AverageTrueRange;
 use ta::{DataItem, High, Low, Next, Period, Reset};
 
-use crate::rolling_moving_average::RollingMovingAverage;
+use crate::average_true_range::AverageTrueRange;
 use crate::model::ADX;
+use crate::rolling_moving_average::RollingMovingAverage;
 
 #[derive(Debug, Clone)]
 pub struct DirectionalMovementIndex {
@@ -45,20 +45,20 @@ impl Next<&DataItem> for DirectionalMovementIndex {
     type Output = ADX;
 
     fn next(&mut self, di: &DataItem) -> Self::Output {
+        let adx = get_adx_indicator(
+            &di,
+            self.atr.next(di),
+            &self.current_di.low(),
+            &self.current_di.high(),
+            &mut self.dmi_plus,
+            &mut self.dmi_minus,
+            &mut self.adx,
+            self.is_new,
+        );
 
         if self.is_new {
             self.is_new = false;
         }
-
-        let adx = get_adx_indicator(
-            &di, 
-            self.atr.next(di), 
-            &self.current_di.low(), 
-            &self.current_di.high(), 
-            &mut self.dmi_plus,
-            &mut self.dmi_minus,
-            &mut self.adx,
-        );
 
         self.current_di = di.clone();
         adx
@@ -97,93 +97,182 @@ fn empty_di() -> Result<DataItem> {
 }
 
 pub fn get_adx_indicator(
-    data_item: &DataItem, 
-    atr_output: f64, 
-    prev_low: &f64, 
-    prev_high: &f64, 
-    ema_di_plus: &mut RollingMovingAverage, 
+    data_item: &DataItem,
+    atr_opt: Option<f64>,
+    prev_low: &f64,
+    prev_high: &f64,
+    ema_di_plus: &mut RollingMovingAverage,
     ema_di_minus: &mut RollingMovingAverage,
     ema_di_adx: &mut RollingMovingAverage,
+    is_new: bool,
 ) -> ADX {
-    let up_move = data_item.high() - prev_high;
-
-    let down_move = prev_low - data_item.low();
-
-    let (dm_plus, dm_minus) = if up_move > down_move && up_move > 0.0 {
-        (up_move, 0.0)
-    } else if down_move > up_move && down_move > 0.0 {
-        (0.0, down_move)
+    if is_new {
+        ADX {
+            adx_opt: None,
+            di_plus_opt: None,
+            di_minus_opt: None,
+        }
     } else {
-        (0.0, 0.0)
-    };
+        let up_move = data_item.high() - prev_high;
 
-    if atr_output != 0.0 {
-        let dm_temp_plus = dm_plus / atr_output;
-        let dm_temp_minus = dm_minus / atr_output;
-        let di_plus = 100.0 * ema_di_plus.next(dm_temp_plus);
-        let di_minus = 100.0 * ema_di_minus.next(dm_temp_minus);
+        let down_move = prev_low - data_item.low();
 
-        let adx_temp = ((di_plus - di_minus) / (di_plus + di_minus)).abs();
+        let (dm_plus, dm_minus) = if up_move > down_move && up_move > 0.0 {
+            (up_move, 0.0)
+        } else if down_move > up_move && down_move > 0.0 {
+            (0.0, down_move)
+        } else {
+            (0.0, 0.0)
+        };
 
-        let adx = 100.0 * ema_di_adx.next(adx_temp);
+        let atr_output = match atr_opt {
+            Some(atr) => atr,
+            None => 1.0,
+        };
 
-        ADX{adx, di_plus, di_minus}
-    } else {
-        ADX{adx: 0.0, di_plus: 0.0, di_minus: 0.0}
+        println!(
+            "dm_plus: {}, dm_minus: {}, atr: {}",
+            dm_plus, dm_minus, atr_output
+        );
+
+        let di_plus_opt = ema_di_plus.next(dm_plus).map(|f| (f / atr_output) * 100.0);
+        let di_minus_opt = ema_di_minus
+            .next(dm_minus)
+            .map(|f| (f / atr_output) * 100.0);
+
+        let adx_temp_opt = match (di_plus_opt, di_minus_opt) {
+            (Some(di_plus), Some(di_minus)) => {
+                Some(((di_plus - di_minus) / (di_plus + di_minus)).abs())
+            }
+            _ => None,
+        };
+
+        // TODO: No unwrap
+        let adx_opt = match adx_temp_opt {
+            Some(adx_temp) => ema_di_adx.next(adx_temp).map(|adx| adx * 100.0),
+            _ => None,
+        };
+
+        ADX {
+            adx_opt,
+            di_plus_opt,
+            di_minus_opt,
+        }
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use crate::test_helper::*;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-//     test_indicator!(ExponentialMovingAverage);
+    #[test]
+    fn test_new() {
+        assert!(DirectionalMovementIndex::new(0).is_err());
+        assert!(DirectionalMovementIndex::new(1).is_ok());
+    }
 
-//     #[test]
-//     fn test_new() {
-//         assert!(ExponentialMovingAverage::new(0).is_err());
-//         assert!(ExponentialMovingAverage::new(1).is_ok());
-//     }
+    #[test]
+    fn test_next() {
+        let mut dmi = DirectionalMovementIndex::new(3).unwrap();
 
-//     #[test]
-//     fn test_next() {
-//         let mut ema = ExponentialMovingAverage::new(3).unwrap();
+        let di1 = DataItem::builder()
+            .close(5.3537490)
+            .open(0.0984338)
+            .high(8.2830820)
+            .low(0.0831237)
+            .volume(1.0)
+            .build()
+            .unwrap();
 
-//         assert_eq!(ema.next(2.0), 2.0);
-//         assert_eq!(ema.next(5.0), 3.5);
-//         assert_eq!(ema.next(1.0), 2.25);
-//         assert_eq!(ema.next(6.25), 4.25);
+        let di2 = DataItem::builder()
+            .close(4.0971314)
+            .open(5.3537490)
+            .high(16.9121161)
+            .low(3.0669901)
+            .volume(1.0)
+            .build()
+            .unwrap();
 
-//         let mut ema = ExponentialMovingAverage::new(3).unwrap();
-//         let bar1 = Bar::new().close(2);
-//         let bar2 = Bar::new().close(5);
-//         assert_eq!(ema.next(&bar1), 2.0);
-//         assert_eq!(ema.next(&bar2), 3.5);
-//     }
+        let di3 = DataItem::builder()
+            .close(1.5416779)
+            .open(4.0971314)
+            .high(4.3877257)
+            .low(1.1157023)
+            .volume(1.0)
+            .build()
+            .unwrap();
 
-//     #[test]
-//     fn test_reset() {
-//         let mut ema = ExponentialMovingAverage::new(5).unwrap();
+        let di4 = DataItem::builder()
+            .close(0.8320898)
+            .open(1.5416779)
+            .high(2.3969461)
+            .low(0.7421172)
+            .volume(1.0)
+            .build()
+            .unwrap();
 
-//         assert_eq!(ema.next(4.0), 4.0);
-//         ema.next(10.0);
-//         ema.next(15.0);
-//         ema.next(20.0);
-//         assert_ne!(ema.next(4.0), 4.0);
+        let di5 = DataItem::builder()
+            .close(0.3684033)
+            .open(0.8320898)
+            .high(1.2149281)
+            .low(0.2187003)
+            .volume(1.0)
+            .build()
+            .unwrap();
 
-//         ema.reset();
-//         assert_eq!(ema.next(4.0), 4.0);
-//     }
+        let di6 = DataItem::builder()
+            .close(0.8053857)
+            .open(0.3684033)
+            .high(1.7971078)
+            .low(0.2623044)
+            .volume(1.0)
+            .build()
+            .unwrap();
 
-//     #[test]
-//     fn test_default() {
-//         ExponentialMovingAverage::default();
-//     }
+        let di7 = DataItem::builder()
+            .close(0.3877222)
+            .open(0.8053857)
+            .high(0.9516707)
+            .low(0.3649837)
+            .volume(1.0)
+            .build()
+            .unwrap();
 
-//     #[test]
-//     fn test_display() {
-//         let ema = ExponentialMovingAverage::new(7).unwrap();
-//         assert_eq!(format!("{}", ema), "EMA(7)");
-//     }
-// }
+        println!("1) {:?}", dmi.next(&di1).di_plus_opt);
+        println!("2) {:?}", dmi.next(&di2).di_plus_opt);
+        println!("3) {:?}", dmi.next(&di3).di_plus_opt);
+        println!("4) {:?}", dmi.next(&di4).di_plus_opt);
+        println!("5) {:?}", dmi.next(&di5).di_plus_opt);
+        println!("6) {:?}", dmi.next(&di6).di_plus_opt);
+        println!("7) {:?}", dmi.next(&di7).di_plus_opt);
+
+        // assert_eq!(ema.next(5.0), 3.5);
+        // assert_eq!(ema.next(1.0), 2.25);
+        // assert_eq!(ema.next(6.25), 4.25);
+    }
+
+    // #[test]
+    // fn test_reset() {
+    //     let mut ema = DirectionalMovementIndex::new(5).unwrap();
+
+    //     assert_eq!(ema.next(4.0), 4.0);
+    //     ema.next(10.0);
+    //     ema.next(15.0);
+    //     ema.next(20.0);
+    //     assert_ne!(ema.next(4.0), 4.0);
+
+    //     ema.reset();
+    //     assert_eq!(ema.next(4.0), 4.0);
+    // }
+
+    // #[test]
+    // fn test_default() {
+    //     DirectionalMovementIndex::default();
+    // }
+
+    // #[test]
+    // fn test_display() {
+    //     let ema = DirectionalMovementIndex::new(7).unwrap();
+    //     assert_eq!(format!("{}", ema), "EMA(7)");
+    // }
+}
