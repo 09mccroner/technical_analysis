@@ -1,7 +1,5 @@
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
 use std::fmt;
 use ta::errors::{Result, TaError};
 use ta::{Close, Next, Period, Reset};
@@ -54,7 +52,6 @@ use ta::{Close, Next, Period, Reset};
 ///
 
 #[doc(alias = "EMA")]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[derive(Debug, Clone)]
 pub struct ExponentialMovingAverage {
     period: usize,
