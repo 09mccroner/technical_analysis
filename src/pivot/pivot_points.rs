@@ -65,7 +65,7 @@ fn item_is_pivot_high(period: usize, b: VecDeque<DataItem>) -> bool {
         if !(b[i].high() < b[i + 1].high()) {
             return false
         };
-        if !(b[period * 2 - i].high() > b[period * 2 - i].high()) {
+        if !(b[period * 2 - i].high() > b[period * 2 - i - 1].high()) {
             return false;
         }
     }
@@ -77,9 +77,9 @@ fn item_is_pivot_low(period: usize, b: VecDeque<DataItem>) -> bool {
         if !(b[i].low() > b[i + 1].low()) {
             return false
         };
-        if !(b[period * 2 - i].low() < b[period * 2 - i].low()) {
+        if !(b[period * 2 - i].low() < b[period * 2 - i - 1].low()) {
             return false;
-        }
+        };
     }
     true
 }
