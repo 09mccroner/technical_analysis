@@ -1,7 +1,7 @@
 use std::fmt;
-
+use rust_decimal::Decimal;
 use ta::errors::Result;
-use ta::indicators::TrueRange;
+use crate::true_range::TrueRange;
 use ta::{Close, High, Low, Next, Period, Reset};
 
 use crate::rolling_moving_average::RollingMovingAverage;
@@ -77,16 +77,16 @@ impl Period for AverageTrueRange {
     }
 }
 
-impl Next<f64> for AverageTrueRange {
-    type Output = Option<f64>;
+impl Next<Decimal> for AverageTrueRange {
+    type Output = Option<Decimal>;
 
-    fn next(&mut self, input: f64) -> Self::Output {
-        self.rma.next(self.true_range.next(input))
+    fn next(&mut self, input: Decimal) -> Self::Output {
+        self.rma.next(Decimal::from(self.true_range.next(input)))
     }
 }
 
 impl<T: High + Low + Close> Next<&T> for AverageTrueRange {
-    type Output = Option<f64>;
+    type Output = Option<Decimal>;
 
     fn next(&mut self, input: &T) -> Self::Output {
         self.rma.next(self.true_range.next(input))

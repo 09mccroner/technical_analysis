@@ -1,5 +1,7 @@
 use std::fmt;
-
+use rust_decimal::Decimal;
+use rust_decimal::prelude::FromPrimitive;
+use rust_decimal_macros::dec;
 use ta::errors::{Result, TaError};
 use ta::{DataItem, High, Low, Next, Period, Reset};
 
@@ -48,8 +50,8 @@ impl Next<&DataItem> for DirectionalMovementIndex {
         let adx = get_adx_indicator(
             &di,
             self.atr.next(di),
-            &self.current_di.low(),
-            &self.current_di.high(),
+            &Decimal::from_f64(self.current_di.low()).unwrap(),
+            &Decimal::from_f64(self.current_di.high()).unwrap(),
             &mut self.dmi_plus,
             &mut self.dmi_minus,
             &mut self.adx,
@@ -98,9 +100,9 @@ fn empty_di() -> Result<DataItem> {
 
 pub fn get_adx_indicator(
     data_item: &DataItem,
-    atr_opt: Option<f64>,
-    prev_low: &f64,
-    prev_high: &f64,
+    atr_opt: Option<Decimal>,
+    prev_low: &Decimal,
+    prev_high: &Decimal,
     ema_di_plus: &mut RollingMovingAverage,
     ema_di_minus: &mut RollingMovingAverage,
     ema_di_adx: &mut RollingMovingAverage,
@@ -113,32 +115,29 @@ pub fn get_adx_indicator(
             di_minus_opt: None,
         }
     } else {
-        let up_move = data_item.high() - prev_high;
+        let up_move = Decimal::from_f64(data_item.high()).unwrap() - prev_high;
 
-        let down_move = prev_low - data_item.low();
+        let down_move = prev_low - Decimal::from_f64(data_item.low()).unwrap();
 
-        let (dm_plus, dm_minus) = if up_move > down_move && up_move > 0.0 {
-            (up_move, 0.0)
-        } else if down_move > up_move && down_move > 0.0 {
-            (0.0, down_move)
+        let (dm_plus, dm_minus) = if up_move > down_move && up_move > dec!(0) {
+            (up_move, dec!(0))
+        } else if down_move > up_move && down_move > dec!(0) {
+            (dec!(0), down_move)
         } else {
-            (0.0, 0.0)
+            (dec!(0), dec!(0))
         };
 
-        let atr_output = match atr_opt {
-            Some(atr) => atr,
-            None => 1.0,
-        };
+        let atr_output = atr_opt.unwrap_or_else(|| dec!(1));
 
         println!(
             "dm_plus: {}, dm_minus: {}, atr: {}",
             dm_plus, dm_minus, atr_output
         );
 
-        let di_plus_opt = ema_di_plus.next(dm_plus).map(|f| (f / atr_output) * 100.0);
+        let di_plus_opt = ema_di_plus.next(dm_plus).map(|f| (f / atr_output) * dec!(100));
         let di_minus_opt = ema_di_minus
             .next(dm_minus)
-            .map(|f| (f / atr_output) * 100.0);
+            .map(|f| (f / atr_output) * dec!(100));
 
         let adx_temp_opt = match (di_plus_opt, di_minus_opt) {
             (Some(di_plus), Some(di_minus)) => {
@@ -149,7 +148,7 @@ pub fn get_adx_indicator(
 
         // TODO: No unwrap
         let adx_opt = match adx_temp_opt {
-            Some(adx_temp) => ema_di_adx.next(adx_temp).map(|adx| adx * 100.0),
+            Some(adx_temp) => ema_di_adx.next(adx_temp).map(|adx| adx * dec!(100)),
             _ => None,
         };
 

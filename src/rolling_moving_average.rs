@@ -1,13 +1,13 @@
 use std::fmt;
-
+use rust_decimal::Decimal;
 use ta::errors::{Result, TaError};
-use ta::indicators::SimpleMovingAverage;
+use crate::simple_moving_average::SimpleMovingAverage;
 use ta::{Next, Period, Reset};
 
 #[derive(Debug, Clone)]
 pub struct RollingMovingAverage {
     period: usize,
-    opt_current: Option<f64>,
+    opt_current: Option<Decimal>,
     sma: SimpleMovingAverage,
     no_invokes: usize,
 }
@@ -32,10 +32,10 @@ impl Period for RollingMovingAverage {
     }
 }
 
-impl Next<f64> for RollingMovingAverage {
-    type Output = Option<f64>;
+impl Next<Decimal> for RollingMovingAverage {
+    type Output = Option<Decimal>;
 
-    fn next(&mut self, input: f64) -> Self::Output {
+    fn next(&mut self, input: Decimal) -> Self::Output {
         if self.no_invokes < self.period - 1 {
             self.no_invokes += 1;
             self.sma.next(input);
@@ -46,7 +46,7 @@ impl Next<f64> for RollingMovingAverage {
             // self.opt_current = Some(self.alpha * input + (1.0 - self.alpha) * self.opt_current);
             self.opt_current = self
                 .opt_current
-                .map(|current| (current * (self.period as f64 - 1.0) + input) / self.period as f64);
+                .map(|current| (current * Decimal::from(self.period - 1) + input) / Decimal::from(self.period));
         }
         self.opt_current
     }
@@ -74,6 +74,7 @@ impl fmt::Display for RollingMovingAverage {
 
 #[cfg(test)]
 mod tests {
+    use rust_decimal_macros::dec;
     use super::*;
 
     #[test]
@@ -86,21 +87,21 @@ mod tests {
     fn test_next() {
         let mut rma = RollingMovingAverage::new(14).unwrap();
 
-        assert_eq!(rma.next(100.0), None);
-        assert_eq!(rma.next(102.0), None);
-        assert_eq!(rma.next(101.0), None);
-        assert_eq!(rma.next(103.0), None);
-        assert_eq!(rma.next(102.0), None);
-        assert_eq!(rma.next(104.0), None);
-        assert_eq!(rma.next(105.0), None);
-        assert_eq!(rma.next(106.0), None);
-        assert_eq!(rma.next(108.0), None);
-        assert_eq!(rma.next(107.0), None);
-        assert_eq!(rma.next(109.0), None);
-        assert_eq!(rma.next(110.0), None);
-        assert_eq!(rma.next(111.0), None);
-        assert_eq!(rma.next(113.0), Some(105.78571428571429));
-        assert_eq!(rma.next(115.0), Some(106.4438775510204));
+        assert_eq!(rma.next(dec!(100.0)), None);
+        assert_eq!(rma.next(dec!(102.0)), None);
+        assert_eq!(rma.next(dec!(101.0)), None);
+        assert_eq!(rma.next(dec!(103.0)), None);
+        assert_eq!(rma.next(dec!(102.0)), None);
+        assert_eq!(rma.next(dec!(104.0)), None);
+        assert_eq!(rma.next(dec!(105.0)), None);
+        assert_eq!(rma.next(dec!(106.0)), None);
+        assert_eq!(rma.next(dec!(108.0)), None);
+        assert_eq!(rma.next(dec!(107.0)), None);
+        assert_eq!(rma.next(dec!(109.0)), None);
+        assert_eq!(rma.next(dec!(110.0)), None);
+        assert_eq!(rma.next(dec!(111.0)), None);
+        assert_eq!(rma.next(dec!(113.0)).unwrap().round_dp(4), dec!(105.7857));
+        assert_eq!(rma.next(dec!(115.0)).unwrap().round_dp(4), dec!(106.4439));
     }
 
     // #[test]
