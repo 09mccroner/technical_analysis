@@ -129,11 +129,6 @@ pub fn get_adx_indicator(
 
         let atr_output = atr_opt.unwrap_or_else(|| dec!(1));
 
-        println!(
-            "dm_plus: {}, dm_minus: {}, atr: {}",
-            dm_plus, dm_minus, atr_output
-        );
-
         let di_plus_opt = ema_di_plus.next(dm_plus).map(|f| (f / atr_output) * dec!(100));
         let di_minus_opt = ema_di_minus
             .next(dm_minus)
